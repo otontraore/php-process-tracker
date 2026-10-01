@@ -9,10 +9,7 @@ use Oton\ProcessTracker\Domain\ProcessStatus;
 
 final readonly class ProcessSnapshot
 {
-    /**
-     * @param list<StepSnapshot> $steps
-     * @param array<string, mixed> $metadata
-     */
+    /** @param list<StepSnapshot> $steps @param array<string, mixed> $metadata */
     public function __construct(
         public string $id,
         public string $type,
@@ -24,6 +21,7 @@ final readonly class ProcessSnapshot
         public ?string $subjectId,
         public array $metadata,
         public array $steps,
-    ) {
-    }
+        public ?string $correlationId = null,
+        public ?string $causationId = null,
+    ) {}
 }
