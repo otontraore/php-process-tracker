@@ -84,7 +84,17 @@ The application service exposes a deliberately small API:
 - `cancel()`
 - `inspect()`
 
-Persistence is provided through `ProcessRepository`. The core ships with an in-memory repository for development and tests.
+The application layer also provides:
+
+- ProcessManager
+- ProcessInspector
+- ProcessRetrier
+- OperationId-based idempotency
+- correlation and causation identifiers
+
+Persistence is provided through ProcessRepository and ProcessStore. The core also defines a database-neutral serializer and transaction boundary so framework adapters can be added without changing the domain.
+
+For application orchestration, ProcessManager adds explicit idempotency when an OperationId is supplied. ProcessInspector provides read-only checks and ProcessRetrier performs explicit retries of failed steps.
 
 ## Architecture
 
