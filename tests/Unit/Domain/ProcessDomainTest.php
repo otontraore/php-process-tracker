@@ -23,14 +23,16 @@ final class ProcessDomainTest extends TestCase
         return new DateTimeImmutable('2026-09-30T12:00:00Z');
     }
 
+    private function process(): Process
+    {
+        return Process::start(new ProcessId('p-1'), new ProcessType('payment'), $this->now());
+    }
+
     public function testProcessStartsRunningWithSubjectAndMetadata(): void
     {
         $process = Process::start(
-            new ProcessId('p-1'),
-            new ProcessType('payment'),
-            $this->now(),
-            new SubjectReference('payment', 'pay-1'),
-            ['channel' => 'api'],
+            new ProcessId('p-1'), new ProcessType('payment'), $this->now(),
+            new SubjectReference('payment', 'pay-1'), ['channel' => 'api'],
         );
 
         self::assertSame(ProcessStatus::Running, $process->status());
@@ -40,10 +42,9 @@ final class ProcessDomainTest extends TestCase
 
     public function testStepLifecycleSupportsCompleteAndSkip(): void
     {
-        $process = Process::start(new ProcessId('p-1'), new ProcessType('order'), $this->now());
+        $process = $this->process();
         $payment = Step::pending(new StepId('payment'), 'payment');
         $email = Step::pending(new StepId('email'), 'email');
-
         $process->addStep($payment);
         $process->addStep($email);
 
@@ -59,14 +60,10 @@ final class ProcessDomainTest extends TestCase
 
     public function testFailedStepPreventsProcessCompletion(): void
     {
-        $process = Process::start(new ProcessId('p-1'), new ProcessType('payment'), $this->now());
-        $step = Step::pending(new StepId('provider'), 'provider');
-        $process->addStep($step);
+        $process = $this->process();
+        $process->addStep(Step::pending(new StepId('provider'), 'provider'));
         $process->startStep(new StepId('provider'), $this->now());
-        $process->failStep(
-            new StepId('provider'),
-            new Failure('Provider timeout', $this->now(), 'provider_timeout'),
-        );
+        $process->failStep(new StepId('provider'), new Failure('Provider timeout', $this->now(), 'provider_timeout'));
 
         $this->expectException(\LogicException::class);
         $process->complete($this->now());
@@ -74,13 +71,11 @@ final class ProcessDomainTest extends TestCase
 
     public function testFailedStepCanBeRetriedByStartingItAgain(): void
     {
-        $process = Process::start(new ProcessId('p-1'), new ProcessType('payment'), $this->now());
+        $process = $this->process();
         $step = Step::pending(new StepId('provider'), 'provider');
         $process->addStep($step);
-
         $process->startStep(new StepId('provider'), $this->now());
         $process->failStep(new StepId('provider'), new Failure('Timeout', $this->now()));
-
         $process->startStep(new StepId('provider'), $this->now());
 
         self::assertSame(StepStatus::Running, $step->status());
@@ -90,9 +85,8 @@ final class ProcessDomainTest extends TestCase
 
     public function testCompletedStepCannotBeStartedAgain(): void
     {
-        $process = Process::start(new ProcessId('p-1'), new ProcessType('payment'), $this->now());
-        $step = Step::pending(new StepId('provider'), 'provider');
-        $process->addStep($step);
+        $process = $this->process();
+        $process->addStep(Step::pending(new StepId('provider'), 'provider'));
         $process->startStep(new StepId('provider'), $this->now());
         $process->completeStep(new StepId('provider'), $this->now());
 
@@ -102,7 +96,7 @@ final class ProcessDomainTest extends TestCase
 
     public function testDuplicateStepIdIsRejected(): void
     {
-        $process = Process::start(new ProcessId('p-1'), new ProcessType('payment'), $this->now());
+        $process = $this->process();
         $process->addStep(Step::pending(new StepId('provider'), 'provider'));
 
         $this->expectException(\LogicException::class);
@@ -111,19 +105,42 @@ final class ProcessDomainTest extends TestCase
 
     public function testProcessCannotBeCompletedWhileAStepIsPending(): void
     {
-        $process = Process::start(new ProcessId('p-1'), new ProcessType('payment'), $this->now());
+        $process = $this->process();
         $process->addStep(Step::pending(new StepId('provider'), 'provider'));
 
         $this->expectException(\LogicException::class);
         $process->complete($this->now());
     }
 
+    public function testProcessCannotBeCompletedWithoutSteps(): void
+    {
+        $this->expectException(\LogicException::class);
+        $this->process()->complete($this->now());
+    }
+
     public function testTerminalProcessCannotBeModified(): void
     {
-        $process = Process::start(new ProcessId('p-1'), new ProcessType('payment'), $this->now());
+        $process = $this->process();
+        $process->addStep(Step::pending(new StepId('provider'), 'provider'));
+        $process->startStep(new StepId('provider'), $this->now());
+        $process->completeStep(new StepId('provider'), $this->now());
         $process->complete($this->now());
 
         $this->expectException(\LogicException::class);
         $process->addStep(Step::pending(new StepId('late'), 'late'));
+    }
+
+    public function testStepIdentityAndFailureArePreserved(): void
+    {
+        $step = Step::pending(new StepId('provider'), 'Provider');
+        $failure = new Failure('Timeout', $this->now(), 'timeout');
+
+        $step->start($this->now());
+        $step->fail($failure);
+
+        self::assertSame('provider', (string) $step->id());
+        self::assertSame('Provider', $step->name());
+        self::assertSame($failure, $step->failure());
+        self::assertSame($this->now(), $step->finishedAt());
     }
 }
