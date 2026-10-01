@@ -43,6 +43,15 @@ final class Step
         if ($attempt < 0) {
             throw new \InvalidArgumentException('Step attempt cannot be negative.');
         }
+        if ($status === StepStatus::Running && ($finishedAt !== null || $failure !== null)) {
+            throw new \InvalidArgumentException('A running step cannot have a finish timestamp or failure.');
+        }
+        if ($status === StepStatus::Failed && $failure === null) {
+            throw new \InvalidArgumentException('A failed step must have failure information.');
+        }
+        if ($status->isTerminal() && $finishedAt === null) {
+            throw new \InvalidArgumentException('A terminal step must have a finished timestamp.');
+        }
 
         return new self($id, $name, $status, $startedAt, $finishedAt, $failure, $attempt);
     }
