@@ -19,6 +19,7 @@ use Oton\ProcessTracker\Domain\SubjectReference;
 
 final class NativeProcessSerializer implements ProcessSerializer
 {
+    /** @return array<string, mixed> */
     public function serialize(Process $process): array
     {
         return [
@@ -58,6 +59,7 @@ final class NativeProcessSerializer implements ProcessSerializer
         ];
     }
 
+    /** @param array<string, mixed> $data */
     public function deserialize(array $data): Process
     {
         $steps = array_map(function (array $item): Step {
