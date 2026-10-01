@@ -11,6 +11,9 @@ final class Process
     /** @var array<string, Step> */
     private array $steps = [];
 
+    /**
+     * @param array<string, mixed> $metadata
+     */
     private function __construct(
         private readonly ProcessId $id,
         private readonly ProcessType $type,
@@ -25,6 +28,7 @@ final class Process
     ) {
     }
 
+    /** @param array<string, mixed> $metadata */
     public static function start(
         ProcessId $id,
         ProcessType $type,
@@ -98,6 +102,7 @@ final class Process
     public function createdAt(): DateTimeImmutable { return $this->createdAt; }
     public function finishedAt(): ?DateTimeImmutable { return $this->finishedAt; }
     public function subject(): ?SubjectReference { return $this->subject; }
+    /** @return array<string, mixed> */
     public function metadata(): array { return $this->metadata; }
     public function failure(): ?Failure { return $this->failure; }
     public function correlationId(): ?CorrelationId { return $this->correlationId; }
