@@ -20,6 +20,8 @@ final class Process
         private ?Failure $failure = null,
         private readonly ?SubjectReference $subject = null,
         private array $metadata = [],
+        private readonly ?CorrelationId $correlationId = null,
+        private readonly ?CausationId $causationId = null,
     ) {
     }
 
@@ -29,8 +31,53 @@ final class Process
         DateTimeImmutable $now,
         ?SubjectReference $subject = null,
         array $metadata = [],
+        ?CorrelationId $correlationId = null,
+        ?CausationId $causationId = null,
     ): self {
-        return new self($id, $type, ProcessStatus::Running, $now, subject: $subject, metadata: $metadata);
+        return new self(
+            $id, $type, ProcessStatus::Running, $now,
+            subject: $subject, metadata: $metadata,
+            correlationId: $correlationId, causationId: $causationId,
+        );
+    }
+
+    /**
+     * @param list<Step> $steps
+     * @param array<string, mixed> $metadata
+     */
+    public static function reconstitute(
+        ProcessId $id,
+        ProcessType $type,
+        ProcessStatus $status,
+        DateTimeImmutable $createdAt,
+        ?DateTimeImmutable $finishedAt,
+        ?Failure $failure,
+        ?SubjectReference $subject,
+        array $metadata,
+        ?CorrelationId $correlationId,
+        ?CausationId $causationId,
+        array $steps,
+    ): self {
+        if ($status === ProcessStatus::Running && $finishedAt !== null) {
+            throw new \InvalidArgumentException('A running process cannot have a finished timestamp.');
+        }
+        if ($status->isTerminal() && $finishedAt === null) {
+            throw new \InvalidArgumentException('A terminal process must have a finished timestamp.');
+        }
+
+        $process = new self(
+            $id, $type, $status, $createdAt, $finishedAt, $failure, $subject,
+            $metadata, $correlationId, $causationId,
+        );
+
+        foreach ($steps as $step) {
+            if (!$step instanceof Step) {
+                throw new \InvalidArgumentException('Process steps must contain only Step instances.');
+            }
+            $process->addStep($step);
+        }
+
+        return $process;
     }
 
     public function id(): ProcessId { return $this->id; }
@@ -41,6 +88,8 @@ final class Process
     public function subject(): ?SubjectReference { return $this->subject; }
     public function metadata(): array { return $this->metadata; }
     public function failure(): ?Failure { return $this->failure; }
+    public function correlationId(): ?CorrelationId { return $this->correlationId; }
+    public function causationId(): ?CausationId { return $this->causationId; }
 
     public function addStep(Step $step): void
     {
@@ -95,6 +144,10 @@ final class Process
     public function complete(DateTimeImmutable $now): void
     {
         $this->assertRunning();
+
+        if ($this->steps === []) {
+            throw new \LogicException('A process must contain at least one step before completion.');
+        }
 
         foreach ($this->steps as $step) {
             if ($step->status() !== StepStatus::Completed && $step->status() !== StepStatus::Skipped) {
