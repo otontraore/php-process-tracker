@@ -18,6 +18,7 @@ final class ProcessManager
         private readonly IdempotencyStore $idempotency,
     ) {}
 
+    /** @param array<string, mixed> $metadata */
     public function start(
         ProcessId|string $id,
         ProcessType|string $type,
@@ -84,6 +85,10 @@ final class ProcessManager
             fn (): ProcessSnapshot => $this->tracker->cancel($processId));
     }
 
+    /**
+     * @param array<int, mixed> $arguments
+     * @param callable(): ProcessSnapshot $action
+     */
     private function execute(?OperationId $operationId, string $operation, array $arguments, callable $action): ProcessSnapshot
     {
         if ($operationId === null) {
