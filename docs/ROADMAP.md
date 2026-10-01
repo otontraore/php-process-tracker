@@ -25,7 +25,6 @@
 - exhaustive unit tests
 
 ## Phase 2 - Process lifecycle
-Implement and test:
 - start
 - add/define steps
 - start step
@@ -33,25 +32,44 @@ Implement and test:
 - fail step
 - cancel process
 - complete process
-- resume process
 - inspect current state
 - invalid transition handling
 
 ## Phase 3 - Persistence
-- ProcessRepository contract
-- ProcessStore contract
-- transactional operation contract
-- in-memory implementation for tests
-- serialization contract
-- database-neutral persistence rules
+Status: implemented on dev.
+
+- ProcessRepository and ProcessStore contracts
+- transaction boundary contract
+- in-memory implementations
+- explicit process serialization contract
+- database-neutral native serializer
+- domain reconstitution with validation
+- persistence independent from Laravel, Symfony and Doctrine
+
+Acceptance criteria:
+- persisted state can be serialized and reconstructed
+- terminal processes can be reconstructed
+- failures, attempts, timestamps and metadata survive round trips
+- no persistence implementation requires a framework or database
 
 ## Phase 4 - Application services
+Status: implemented on dev.
+
 - ProcessManager
 - ProcessInspector
 - ProcessRetrier
-- lifecycle commands/results
-- idempotent operations
+- operation identifiers
+- idempotent lifecycle operations through an explicit idempotency store
 - correlation and causation identifiers
+- lifecycle results represented by immutable snapshots
+- in-memory idempotency implementation for tests
+
+Acceptance criteria:
+- repeated operations with the same operation ID return the original result
+- reusing an operation ID with different parameters is rejected
+- retry only starts failed steps
+- inspection is read-only
+- correlation and causation identifiers remain available without a tracing dependency
 
 ## Phase 5 - Laravel integration
 - service provider
@@ -114,4 +132,4 @@ Implement and test:
 
 ## Development rule
 
-Do not start the next phase until the current phase passes its acceptance criteria on `dev`.
+Do not start the next phase until the current phase passes its acceptance criteria on dev.
