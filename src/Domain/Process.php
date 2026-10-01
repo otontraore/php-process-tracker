@@ -61,6 +61,12 @@ final class Process
         if ($status === ProcessStatus::Running && $finishedAt !== null) {
             throw new \InvalidArgumentException('A running process cannot have a finished timestamp.');
         }
+        if ($status === ProcessStatus::Failed && $failure === null) {
+            throw new \InvalidArgumentException('A failed process must have failure information.');
+        }
+        if ($status !== ProcessStatus::Failed && $failure !== null) {
+            throw new \InvalidArgumentException('Only failed processes can have failure information.');
+        }
         if ($status->isTerminal() && $finishedAt === null) {
             throw new \InvalidArgumentException('A terminal process must have a finished timestamp.');
         }
