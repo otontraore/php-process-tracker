@@ -74,7 +74,13 @@ final class Process
             if (!$step instanceof Step) {
                 throw new \InvalidArgumentException('Process steps must contain only Step instances.');
             }
-            $process->addStep($step);
+
+            $key = (string) $step->id();
+            if (isset($process->steps[$key])) {
+                throw new \InvalidArgumentException(sprintf('Duplicate step "%s" in process state.', $key));
+            }
+
+            $process->steps[$key] = $step;
         }
 
         return $process;
