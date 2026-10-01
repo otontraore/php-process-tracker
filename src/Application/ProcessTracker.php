@@ -4,8 +4,9 @@ declare(strict_types=1);
 
 namespace Oton\ProcessTracker\Application;
 
-use DateTimeImmutable;
+use Oton\ProcessTracker\Domain\CausationId;
 use Oton\ProcessTracker\Domain\Clock;
+use Oton\ProcessTracker\Domain\CorrelationId;
 use Oton\ProcessTracker\Domain\Failure;
 use Oton\ProcessTracker\Domain\Process;
 use Oton\ProcessTracker\Domain\ProcessId;
@@ -20,20 +21,18 @@ final class ProcessTracker
     public function __construct(
         private readonly ProcessRepository $repository,
         private readonly Clock $clock,
-    ) {
-    }
+    ) {}
 
-    /**
-     * @param array<string, mixed> $metadata
-     */
+    /** @param array<string, mixed> $metadata */
     public function start(
         ProcessId|string $id,
         ProcessType|string $type,
         ?SubjectReference $subject = null,
         array $metadata = [],
+        CorrelationId|string|null $correlationId = null,
+        CausationId|string|null $causationId = null,
     ): ProcessSnapshot {
         $processId = $id instanceof ProcessId ? $id : new ProcessId($id);
-
         if ($this->repository->has($processId)) {
             throw new \LogicException(sprintf('Process "%s" already exists.', $processId));
         }
@@ -44,71 +43,59 @@ final class ProcessTracker
             $this->clock->now(),
             $subject,
             $metadata,
+            $correlationId instanceof CorrelationId || $correlationId === null
+                ? $correlationId
+                : new CorrelationId($correlationId),
+            $causationId instanceof CausationId || $causationId === null
+                ? $causationId
+                : new CausationId($causationId),
         );
-
         $this->repository->save($process);
-
         return $this->snapshot($process);
     }
 
-    public function addStep(
-        ProcessId|string $processId,
-        StepId|string $stepId,
-        string $name,
-    ): ProcessSnapshot {
+    public function addStep(ProcessId|string $processId, StepId|string $stepId, string $name): ProcessSnapshot
+    {
         $process = $this->getProcess($processId);
-        $step = Step::pending(
-            $stepId instanceof StepId ? $stepId : new StepId($stepId),
-            $name,
-        );
-
-        $process->addStep($step);
+        $process->addStep(Step::pending(
+            $stepId instanceof StepId ? $stepId : new StepId($stepId), $name
+        ));
         $this->repository->save($process);
-
         return $this->snapshot($process);
     }
 
     public function startStep(ProcessId|string $processId, StepId|string $stepId): ProcessSnapshot
     {
         $process = $this->getProcess($processId);
-        $id = $stepId instanceof StepId ? $stepId : new StepId($stepId);
-        $process->startStep($id, $this->clock->now());
+        $process->startStep($stepId instanceof StepId ? $stepId : new StepId($stepId), $this->clock->now());
         $this->repository->save($process);
-
         return $this->snapshot($process);
     }
 
     public function completeStep(ProcessId|string $processId, StepId|string $stepId): ProcessSnapshot
     {
         $process = $this->getProcess($processId);
-        $id = $stepId instanceof StepId ? $stepId : new StepId($stepId);
-        $process->completeStep($id, $this->clock->now());
+        $process->completeStep($stepId instanceof StepId ? $stepId : new StepId($stepId), $this->clock->now());
         $this->repository->save($process);
-
         return $this->snapshot($process);
     }
 
-    public function failStep(
-        ProcessId|string $processId,
-        StepId|string $stepId,
-        string $message,
-        ?string $code = null,
-    ): ProcessSnapshot {
+    public function failStep(ProcessId|string $processId, StepId|string $stepId, string $message, ?string $code = null): ProcessSnapshot
+    {
         $process = $this->getProcess($processId);
-        $id = $stepId instanceof StepId ? $stepId : new StepId($stepId);
-        $process->failStep($id, new Failure($message, $this->clock->now(), $code));
+        $process->failStep(
+            $stepId instanceof StepId ? $stepId : new StepId($stepId),
+            new Failure($message, $this->clock->now(), $code),
+        );
         $this->repository->save($process);
-
         return $this->snapshot($process);
     }
 
     public function skipStep(ProcessId|string $processId, StepId|string $stepId): ProcessSnapshot
     {
         $process = $this->getProcess($processId);
-        $id = $stepId instanceof StepId ? $stepId : new StepId($stepId);
-        $process->skipStep($id, $this->clock->now());
+        $process->skipStep($stepId instanceof StepId ? $stepId : new StepId($stepId), $this->clock->now());
         $this->repository->save($process);
-
         return $this->snapshot($process);
     }
 
@@ -117,19 +104,14 @@ final class ProcessTracker
         $process = $this->getProcess($processId);
         $process->complete($this->clock->now());
         $this->repository->save($process);
-
         return $this->snapshot($process);
     }
 
-    public function fail(
-        ProcessId|string $processId,
-        string $message,
-        ?string $code = null,
-    ): ProcessSnapshot {
+    public function fail(ProcessId|string $processId, string $message, ?string $code = null): ProcessSnapshot
+    {
         $process = $this->getProcess($processId);
         $process->fail(new Failure($message, $this->clock->now(), $code));
         $this->repository->save($process);
-
         return $this->snapshot($process);
     }
 
@@ -138,7 +120,6 @@ final class ProcessTracker
         $process = $this->getProcess($processId);
         $process->cancel($this->clock->now());
         $this->repository->save($process);
-
         return $this->snapshot($process);
     }
 
@@ -156,29 +137,18 @@ final class ProcessTracker
     {
         $steps = array_map(
             static fn (Step $step): StepSnapshot => new StepSnapshot(
-                (string) $step->id(),
-                $step->name(),
-                $step->status(),
-                $step->attempt(),
-                $step->startedAt(),
-                $step->finishedAt(),
-                $step->failure()?->message,
-                $step->failure()?->code,
+                (string) $step->id(), $step->name(), $step->status(), $step->attempt(),
+                $step->startedAt(), $step->finishedAt(),
+                $step->failure()?->message, $step->failure()?->code,
             ),
             $process->steps(),
         );
 
         return new ProcessSnapshot(
-            (string) $process->id(),
-            (string) $process->type(),
-            $process->status(),
-            $process->createdAt(),
-            $process->finishedAt(),
-            $process->failure()?->message,
-            $process->subject()?->type,
-            $process->subject()?->id,
-            $process->metadata(),
-            $steps,
+            (string) $process->id(), (string) $process->type(), $process->status(),
+            $process->createdAt(), $process->finishedAt(), $process->failure()?->message,
+            $process->subject()?->type, $process->subject()?->id, $process->metadata(), $steps,
+            $process->correlationId()?->value, $process->causationId()?->value,
         );
     }
 }
